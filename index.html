@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Socket.IO Chat</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+
+    .chat-card {
+      width: 100%;
+      max-width: 540px;
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+      display: flex;
+      flex-direction: column;
+      height: 80vh;
+      max-height: 720px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* header */
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 22px;
+      background: #ffffff;
+      border-bottom: 1px solid #edf2f7;
+    }
+
+    .chat-header h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #1e293b;
+      letter-spacing: -0.01em;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 30px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: #475569;
+      transition: background 0.2s;
+    }
+
+    .status-pill.connected {
+      background: #e6f7e6;
+      color: #0b6e4f;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+      transition: background 0.2s;
+    }
+
+    .status-pill.connected .status-dot {
+      background: #22c55e;
+    }
+
+    /* messages area */
+    .messages-area {
+      flex: 1;
+      padding: 20px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #fafcff;
+    }
+
+    .message-bubble {
+      max-width: 80%;
+      padding: 10px 16px;
+      border-radius: 18px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      word-break: break-word;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-bubble.sent {
+      align-self: flex-end;
+      background: #0b6e4f;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message-bubble.received {
+      align-self: flex-start;
+      background: #ffffff;
+      color: #1e293b;
+      border: 1px solid #e9edf2;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-bubble.system {
+      align-self: center;
+      background: #eef2f6;
+      color: #4a5b6e;
+      font-size: 0.78rem;
+      padding: 6px 16px;
+      border-radius: 30px;
+      text-align: center;
+      max-width: 90%;
+    }
+
+    .bubble-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin-bottom: 3px;
+    }
+
+    .sent .bubble-label {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* footer */
+    .chat-footer {
+      padding: 16px 20px;
+      background: #ffffff;
+      border-top: 1px solid #edf2f7;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #dde3ea;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      background: #ffffff;
+      outline: none;
+      transition: border 0.2s;
+      color: #1e293b;
+    }
+
+    .input-row input:focus {
+      border-color: #0b6e4f;
+    }
+
+    .input-row input::placeholder {
+      color: #9aa8b9;
+    }
+
+    .input-row button {
+      padding: 12px 24px;
+      background: #0b6e4f;
+      border: none;
+      border-radius: 30px;
+      color: white;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.05s;
+      white-space: nowrap;
+    }
+
+    .input-row button:hover {
+      background: #0a5a40;
+    }
+
+    .input-row button:active {
+      transform: scale(0.97);
+    }
+
+    /* scrollbar */
+    .messages-area::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .messages-area::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .messages-area::-webkit-scrollbar-thumb {
+      background: #ccd6e0;
+      border-radius: 10px;
+    }
+
+    .messages-area::-webkit-scrollbar-thumb:hover {
+      background: #a9b8c7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="chat-card">
+    <!-- simple header -->
+    <div class="chat-header">
+      <h2>💬 Chat</h2>
+      <div id="statusPill" class="status-pill">
+        <span class="status-dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+
+    <!-- messages container -->
+    <div id="messagesArea" class="messages-area"></div>
+
+    <!-- input -->
+    <div class="chat-footer">
+      <form id="chatForm" class="input-row">
+        <input type="text" id="messageInput" placeholder="Write a message..." autocomplete="off" required />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // --- configuration ---
+    const SERVER_URL = 'http://localhost:3003';
+    const socket = io(SERVER_URL);
+
+    // --- DOM elements ---
+    const statusPill = document.getElementById('statusPill');
+    const statusText = document.getElementById('statusText');
+    const messagesArea = document.getElementById('messagesArea');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+
+    // --- helper: add message to UI ---
+    function addMessage(text, type = 'received', label = '') {
+      const bubble = document.createElement('div');
+      bubble.classList.add('message-bubble', type);
+
+      // optional small label (e.g. "YOU" / "SERVER")
+      if (label) {
+        const labelEl = document.createElement('div');
+        labelEl.classList.add('bubble-label');
+        labelEl.textContent = label;
+        bubble.appendChild(labelEl);
+      }
+
+      // message content (string or object)
+      const content = document.createElement('span');
+      content.textContent = typeof text === 'object' ? JSON.stringify(text) : text;
+      bubble.appendChild(content);
+
+      messagesArea.appendChild(bubble);
+      // auto-scroll to bottom
+      messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+
+    // --- socket connection events ---
+    socket.on('connect', () => {
+      statusPill.classList.add('connected');
+      statusText.textContent = 'Connected';
+      addMessage('You are connected to the chat server.', 'system');
+    });
+
+    socket.on('disconnect', (reason) => {
+      statusPill.classList.remove('connected');
+      statusText.textContent = 'Disconnected';
+      addMessage(`Connection lost (${reason})`, 'system');
+    });
+
+    // --- server → client events (NestJS gateway) ---
+    socket.on('Welcome', (msg) => {
+      addMessage(msg, 'system', 'SERVER');
+    });
+
+    socket.on('Goodbye', (msg) => {
+      addMessage(msg, 'system', 'SERVER');
+    });
+
+    socket.on('reply', (msg) => {
+      addMessage(msg, 'received', 'SERVER');
+    });
+
+    // --- send message ---
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const message = messageInput.value.trim();
+      if (!message) return;
+
+      // emit to NestJS @SubscribeMessage('newMessage')
+      socket.emit('newMessage', message);
+
+      // show in UI as sent
+      addMessage(message, 'sent', 'YOU');
+
+      // clear input
+      messageInput.value = '';
+      messageInput.focus();
+    });
+
+    // focus input on page load
+    messageInput.focus();
+  </script>
+</body>
+</html>
